@@ -1,0 +1,31 @@
+---
+title: "Assignment1"
+author: "Chia-Hao Lo"
+date: "September 28th 2024"
+output:
+  pdf_document: default
+---
+
+# Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE)
+```
+
+```{r }
+#Load the required packages
+library(tidyverse)
+library(inspectdf)
+library(caret)
+library(moments)
+library(tidymodels)
+library(modelr)
+library(ISLR)
+library(car)
+```
+
+# Q1. Loading the data
+
+We need to calculate our ysn to satisfy the delivery specification
+
+* 123

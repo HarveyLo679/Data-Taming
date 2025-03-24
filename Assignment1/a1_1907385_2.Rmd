@@ -1,0 +1,339 @@
+---
+title: "Assignment1"
+author: "Chia-Hao Lo"
+date: "September 28th 2024"
+output:
+  pdf_document: default
+---
+
+# Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE)
+```
+
+```{r }
+#Load the required packages
+library(tidyverse)
+library(inspectdf)
+library(caret)
+library(moments)
+library(tidymodels)
+library(modelr)
+library(ISLR)
+library(car)
+```
+
+# Q1. Loading the data
+
+We need to calculate our ysn to satisfy the delivery specification
+
+```{r}
+# Your student number goes here
+ysn = 1907385
+# Calculate your student number modulo 3
+mod4 <- ysn %% 4
+mod4
+```
+
+[After calculating ysn we get 1. Due to deliverable specification that ysn = 1 mod 4 use the Indian data, we will use Indian data as our dataframe]
+
+```{r}
+filename <- paste0("a1_1907385_3", ".pdf")
+filename
+
+# Read in the data using the correct tidyverse command
+
+ind1 <- read_csv("./data/India.csv")
+ind1 <- as_tibble(ind1)
+
+# Display the first 10 lines of the data
+head(ind1, 10)
+```
+
+# Q2. The dimensions of the data set
+
+For this part, we will use dim() function to get a list of the form.
+
+```{r}
+#Dimension
+dim(ind1)
+```
+
+The dimensions of the data frame is [50 rows, 8 columns]
+
+
+# Q3. Random permutation of the rows
+
+
+From the delivery specification, we know seed equals to ysn, we gt ysn from Q1 and ysn = 1. Then we permute all rows into data set.
+```{r}
+#
+set.seed(ysn)
+ind1_permuted <- sample_n(ind1, 50)
+head(ind1_permuted, 10)
+```
+
+The result shows the first 10 rows.
+
+# Q4. Adding an extra column of row numbers
+
+We add new rows and use relocate() to set this row to the first row.
+
+```{r}
+#
+ind1_permuted1 <- ind1_permuted %>%
+  mutate(Rows = row_number()) %>% relocate("Rows", .before = Player)
+
+head(ind1_permuted1, 10)
+```
+
+
+# Q5 Data cleaning
+
+Here we test if the data set contains the duplicated data.
+```{r}
+# Check if the data has some duplicated rows
+ind1_clean <- ind1_permuted1 %>%
+  distinct()
+sum(duplicated(ind1_clean))
+```
+Here we delete test data
+```{r}
+ind1_clean1 <- ind1_clean %>%
+  filter(!(Player == "test1test1")
+         )
+```
+
+Here we convert negative data to positive data.
+```{r}
+#To get absolute value for whole data
+ind1_clean1[ind1_clean1$Player == "IK Pathan", "2005"] <- 
+  str_replace(ind1_clean1[ind1_clean1$Player == "IK Pathan", "2005"], "-", "")
+ind1_clean1
+```
+Here we detect if here is any NA data.
+```{r}
+#To check if there is any missing values in any columns
+inspect_na(ind1_clean1)
+```
+Here we need to convert word zero to number 0
+```{r}
+ind1_clean2 <- ind1_clean1 %>%
+  mutate(`2002` = str_replace(`2002`, "zero", "0"))
+print(ind1_clean2[ind1_clean2$Player == "T Yohannan", "2002"])
+```
+Delete player NM Kulkarni row because in 2001 data is impossible for one innings to get 9999 runs.
+```{r}
+ind1_clean3 <- ind1_clean2 %>%
+  filter(!(Player == "NM Kulkarni")
+  )
+
+print(ind1_clean3 %>% filter(Player == "NM Kulkarni"))
+```
+
+To find the values in RightHanded column that is not yes or no
+```{r}
+invalid_values <- ind1_clean3[!(ind1_clean3$RightHanded %in% c("yes", "no")),]
+invalid_values
+```
+Here we found out there are two rows need to fix. First we change rows in RightHanded column contain Y to yes, like other data.
+```{r}
+#Change Y to yes
+ind1_clean3$RightHanded[ind1_clean3$RightHanded == "Y"] <- "yes"
+ind1_clean3
+```
+After we look at this row we know this row is test row and there is no valued data. So we will remove it.
+
+
+After cleaning the database, we start to tidy the data. First, we convert 2000-2005 columns to two new columns year and performance.
+
+
+# Q6 Tidy data
+# (a)
+```{r}
+ind1_convert <- ind1_clean3 %>%
+  gather(key = "year", value = "performance", starts_with("200"))
+
+ind1_convert
+```
+Here we separate the performance to four new columns.
+
+
+# (b)
+```{r}
+details <- str_match(ind1_convert$performance, "(\\d+) innings, (\\d+) outs, (\\d+) runs, (\\d+) balls")
+ind1_performance <- ind1_convert %>%
+  mutate(
+    Innings = as.numeric(details[,2]),
+    Outs = as.numeric(details[,3]),
+    Runs = as.numeric(details[,4]),
+    Balls = as.numeric(details[,5])
+  )
+ind1_performance
+```
+After we get four new columns then we can delete performance column.
+
+
+# (c)
+```{r}
+ind1_cleaned <- ind1_performance %>%
+  select(-performance)
+ind1_cleaned
+```
+Here we add T_rows with the row numbers
+
+
+# (d)
+```{r}
+ind1_cleaned1 <- ind1_cleaned %>%
+  mutate(T_rows = row_number()) %>%
+  relocate(T_rows, .before = Player)
+head(ind1_cleaned1, 10)
+```
+
+# Q7 Data types
+.Rows: Categorical Ordinal(each row number follows the order and it is for category the order of the players)
+
+.T_rows: Categorical Ordinal(each row number follows the order and it is for category the order of the rows)
+
+.Player: Categorical Nominal(names of player, which are labels also no natural order for player names)
+
+.RightHanded: Categorical Nominal(it shows if the player is righthanded, this is a categorical nominal variable, which is yes or no)
+
+.year: Categorical Ordinal(represents a sequence of time)
+
+.Innings:Quantitative Discrete(the counts of innings played in a given year)
+
+.Outs:Quantitative Discrete(counts how many times a player was out)
+
+.Runs:Quantitative Discrete(total scores of runs scored by a player)
+
+.Balls:Quantitative Discrete(certain counts of a player faced the total number of balls)
+
+# Q8 Tame data
+Here we will follow Tame data from my uni material steps, first we lower case, then we convert the data type to question 7 data type we found.
+```{r}
+ind1_taming <- ind1_cleaned1 %>%
+  rename_with(tolower)
+
+ind1_taming$rows <- as.ordered(ind1_taming$rows)
+
+ind1_taming$t_rows <- as.ordered(ind1_taming$t_rows)
+
+ind1_taming$year <- as.ordered(ind1_taming$year)
+
+ind1_taming$player <- as.factor(ind1_taming$player)
+head(ind1_taming, 10)
+```
+
+```{r}
+dim(ind1_taming)
+```
+Here we filter the data is non-zero, we remove the balls are equal to zero
+
+
+# Q9 Non-zero ball data
+```{r}
+ind1_balls <- ind1_taming %>%
+  filter(balls > 0)
+head(ind1_balls, 10)
+```
+```{r}
+dim(ind1_balls)
+```
+Here we set the correct seed again and set 70 rows
+
+
+# Q10 Random subset
+# (a)
+```{r}
+set.seed(ysn)
+ind1_sample <- sample_n(ind1_balls, 70)
+```
+Here we sort the rows by tidy row numbers
+# (b)
+```{r}
+ind1_sorted <- ind1_balls %>%
+  arrange(t_rows)
+head(ind1_sorted, 10)
+
+```
+
+```{r}
+dim(ind1_sorted)
+```
+Here we calculate the percentage of innings and he number of runs scored per ball, then change two columns' location
+
+
+# Q11 pct_out & run_rate
+# (a)
+```{r}
+ind1_new_columns <- ind1_sorted %>%
+  mutate(
+    pct_out = round((outs/innings)*100, 2),
+    run_rate = round(runs/balls, 3)) %>% 
+  relocate(pct_out, run_rate, .after = year)
+#head(ind1_new_columns, 10)
+ind1_new_columns
+```
+.pct_out: Quantitative Continuous(this is a numeric and presents by percentage)
+
+.run_rate: Quantitative Continuous(this represents the runs score per ball and it can be any numeric value)
+```{r}
+dim(ind1_new_columns)
+```
+
+# (b)
+For the percentage of outs, it is calculate outs/innings, it is the same as pct_out. Thus we use min() function to find the lowest percentage of outs.
+```{r}
+min_pct_out = ind1_new_columns %>%
+  filter(pct_out == min(pct_out)) %>%
+  select(player, year, pct_out)
+min_pct_out
+```
+From the results, there are 6 players with the lowest percentage of outs, which are same value of 0 %.
+
+We need to find the highest run rate, which is run_rate's dataset. We use max() function to find the highest value.
+```{r}
+max_run_rate <- ind1_new_columns %>%
+  filter(run_rate == max(run_rate)) %>%
+  select(player, year, run_rate)
+max_run_rate
+```
+For the highest run rate, the result shows in 2001, and the value is 0.967.
+
+Here we change the year data type and perform the boxplot
+
+
+# Q12 Boxplot using year
+```{r}
+ind1_new_columns1 <- mutate(ind1_new_columns, year = factor(year, ordered = TRUE))
+
+ggplot(ind1_new_columns1, aes(x = year, y = run_rate, fill = righthanded)) +
+  geom_boxplot()
+```
+Here we also perform two boxplots
+
+
+# Q13 Side-by-side boxplots
+```{r}
+boxplot_pct_out <- ggplot(ind1_new_columns1, aes(x = righthanded, y = pct_out, fill = righthanded)) +
+  geom_boxplot()
+
+boxplot_pct_out
+```
+
+```{r}
+boxplot_run_rate <- ggplot(ind1_new_columns1, aes(x = righthanded, y = run_rate, fill = righthanded)) +
+  geom_boxplot()
+boxplot_run_rate
+```
+
+
+# Q14 Analysis
+Based on the analysis in Q11, we found that players with a lower percentage of outs (pct_out) generally perform blanded. For example, T Yohannan had the lowest percentage of outs at 0%, his data mostly is 0 and it means he has lower priority playing rate. In contrast, players with a higher percentage of outs were more likely to have higher run rates, as their innings were higher.
+
+In the box plots, we can see the patterns based on handedness. right-handed players had a wider variation in run_rate across years compared to left-handed players. For example, in the year 2004, right-handed players had a significantly higher spread in run_rate. For left-handed players showed more consistency, like 2002, the run_rate distribution was more compact.
+
+Additionally, the box plots of pct_out and run_rate by handedness shows right-handed players seemed to perform better on average, as shown by a higher median run_rate and a generally lower pct_out. This suggests that right-handed players may have an advantage or perhaps more opportunities in the dataset used.

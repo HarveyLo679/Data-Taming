@@ -1,0 +1,96 @@
+---
+title: "Title"
+author: "Your name"
+date: "Date you finished your assignment"
+output:
+  pdf_document: default
+---
+
+# Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE)
+```
+
+```{r }
+#Load the required packages
+```
+
+# Q1. Loading the data
+
+[Some text describing what you are doing.]
+
+```{r}
+# Your student number goes here
+ysn = 1000
+# Calculate your student number modulo 3
+mod4 <- ysn %% 4
+mod4
+```
+
+[Some text explaining what is happening.]
+
+```{r}
+filename <- paste0("...")
+filename
+
+# Read in the data using the correct tidyverse command
+
+data <- read_csv(filename)
+
+# Display the first 10 lines of the data
+
+```
+
+# Q2. The dimensions of the data set
+
+[Some text describing what you are doing.]
+
+```{r}
+#
+```
+
+[Some text describing what your R code tells us.]
+
+
+# Q3. Random permutation of the rows
+
+
+[Some text describing what you are doing.]
+```{r}
+#
+```
+
+[Some text describing what your R code tells us.]
+
+# Q4. Adding an extra column of row numbers
+
+[Some text describing what you are doing.]
+
+```{r}
+#
+```
+
+[Some text describing what your R code tells us.]
+
+# Q5 Data cleaning
+
+[Some text describing what you are doing.]
+
+```{r}
+#
+```
+
+[Some text describing what your R code tells us.]
+
+# Q6
+
+etc.
+
+etc.
+
+etc.
+
+etc.
+
+etc.

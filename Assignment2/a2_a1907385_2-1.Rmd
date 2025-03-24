@@ -1,0 +1,532 @@
+---
+title: "Assignment2"
+author: "Chia-Hao Lo"
+date: "October 27th 2024"
+output:
+  pdf_document: default
+---
+
+#Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+```
+
+```{r }
+#Load the required packages
+library(tidyverse)
+library(inspectdf)
+library(caret)
+library(moments)
+library(tidymodels)
+library(modelr)
+```
+
+# Q1. Loading the data
+* As a data scientist we need to follow deliverable specifications. So, here we calculate which data set.
+```{r}
+# Here we use our ysn to identify which data set we need to use
+ysn = 1907385
+x <- ysn %% 4
+x
+```
+* Here we get 1 from student number modulo 4, then we use division_1.csv to be our data set.
+
+```{r}
+# Read in the data using the correct tidyverse command
+div1 <- read_csv("./data/division_1.csv")
+# Display the first 10 lines of the data
+head(div1, 10)
+```
+
+* The dimension of the data set gives an idea about the size of the data. We get to know how many variables and data points we are going to work with.
+```{r}
+dim(div1)
+```
+
+* The dim() function here takes 1 argument which is the data set and gives out the dimension of the division_1.csv data set as rows = 1200, columns = 4
+
+# Q2. Random permutation of the rows
+* Let's set the seed to 1907385, then shuffle all rows without replacement. Finally, output the first 10 rows of the permuted dataset.
+```{r}
+# Set the seed
+set.seed(ysn)
+# Shuffle the dataset rows without replacement and name it permuted_data
+div2 <- sample_n(div1, nrow(div1), replace = FALSE)
+# Display the first 10 rows of the permuted dataset
+head(div2, 10)
+```
+
+* Here we show the dimension again after permuting all rows
+```{r}
+dim(div2)
+```
+
+# Q3. Adding extra column for row numbers
+* Here we add new column called 'ROWS' to the left of the datset, which contains the row numbers.This will help us track the changes made to the data set. Finally, output the first 10 rows of the updated dataset.
+```{r}
+# Add a 'ROWS' column to the left with the row numbers
+div3 <- div2 %>%
+  mutate(ROWS = row_number()) %>%
+  relocate("ROWS", .before = PID)
+# Display the first 10 rows of the dataset with the new 'ROWS' column
+head(div3, 10)
+```
+* Here we add row numbers in front of the rows by using mutate and relocate function.
+
+# Q4. Data Cleaning
+## Q4.1  Negative values removal
+```{r}
+# Here we remove the negative values
+div3_cleaned <- div3 %>%
+  filter(`Bugs REM` >= 0)
+```
+
+# Q4.2 Impossible data removal
+* Here we removed the data that LOC contains impossible value(99999999)
+```{r}
+# The value is larger than 99999
+div3_cleaned1 <- div3_cleaned %>%
+  filter(!(LOC > 99999))
+```
+
+# Q4.3 Correction of typos
+* Here we correct the wrong typo of '32 thousand 3 hundred and 7' in LOC, replace it with '32307'
+```{r}
+# The typo is wrong
+div3_cleaned2 <- div3_cleaned1 %>%
+  mutate(LOC =  str_replace(LOC, "32 thousand 3 hundred and 7", "32307"))
+```
+
+* Here we found a wrong type in Debug time, 'fourteen' should be '14'
+```{r}
+# Replace the wrong typo in Debug Time
+div3_cleaned3 <- div3_cleaned2 %>%
+  mutate(`Debug Time` = str_replace(`Debug Time`, "fourteen", "14"))
+```
+
+```{r}
+# Display the first 10 rows of the dataset after cleaning the data
+head(div3_cleaned3, 10)
+```
+* This will display the cleaned dataset after fixing all the issues in the dataset.
+
+```{r}
+# Display the dimensions of the dataset after cleaning the data
+dim(div3_cleaned3)
+```
+* Here we can see we removed 2 data from the original dataset
+
+# Q5. Replace Debug time column
+* Here we extract hours and minutes respectively from 'Debug Time' column by str_replace function
+```{r}
+div3_tidy <- div3_cleaned3 %>%
+  mutate(DB_HRS = str_match(`Debug Time`, "(\\d+) hours")[, 2],
+         DB_MINS = str_match(`Debug Time`, "(\\d+) minutes")[, 2]
+         )
+# Here we remove the 'Debug Time' column
+div3_tidy1 <- div3_tidy %>%
+  select(- `Debug Time`)
+# Display the first 10 rows of the updated dataset
+head(div3_tidy1, 10)
+```
+
+```{r}
+# Display the dimensions of the dataset
+dim(div3_tidy1)
+```
+# Q6. Types of Variables
+
+- **ROWS**: 
+  - **Categorical Ordinal**
+  - This variable represents the position of each row in the dataset. Even though it is numerical, the row numbers have a specific order, which makes it an ordinal variable.
+  
+- **PID**: 
+  -**Categorical Nominal**
+  - The program name has been replace with this identifier, it means this number is the ID number for the data. Each ID number is unique and represents each program.
+  
+- **LOC**: 
+  - **Quantitative Discrete**
+  - Represents the numbers of lines of code in a program.
+- **Bugs REM**:
+  - **Quantitative Discrete**
+  - Represents the number of bugs remaining after debugging.
+  
+- **DB_HRS**:
+  - **Quantitative Discrete**
+  - As time can be measured with more precision than just integers, as the description said they round it to the integer and this variable ends up being discretised because it is the unit of hours, not continuous time.
+  
+- **DB_MINS**:
+  - **Quantitative Discrete**
+  - As time can be measured with more precision than just integers, as the description said they round it to the integer and this variable ends up being discretised because it is the unit of minutes, not continuous time.
+
+# Q7. Data taming
+* From **Module 2, page 3**. Here’s what we follow to make sure our data is properly **tamed** based on the provided guidelines:
+
+## Q7.1 Naming Conventions for Variable Names
+   - Ensure all variable names are less than 20 characters.
+   - Use **snake_case** (lowercase letters with underscores).
+   - Avoid spaces in variable names.
+```{r}
+# Rename the columns using rename()
+div3_tame <- div3_tidy1 %>%
+  rename(
+    rows = ROWS,
+    pid = PID,
+    loc = LOC,
+    bugs_rem = `Bugs REM`,
+    db_hrs = DB_HRS,
+    db_mins = DB_MINS
+  )
+```
+
+## Q7.2 Column Arrangement
+   - Place the subject identifiers (such as `PID`) in the first column.
+```{r}
+# Put the column representing the subjects in the first column of a data frame
+div3_tame1 <- div3_tame %>%
+  relocate("pid", .before = rows)
+```
+
+## Q7.3 Ordered Factors, Factors, Characters, and Logicals
+  - Convert **categorical ordinal** variables to ordered factors.
+  - Convert **nominal categorical** variables to regular factors.
+  - **Store integers as `<int>`** for memory conservation.
+```{r}
+# rows should be ordered
+div3_tame2 <- div3_tame1 %>%
+  mutate(rows = as.ordered(rows))
+```
+
+```{r}
+# The identify column should be factor
+div3_tame3 <- div3_tame2 %>%
+  mutate(pid = as.factor(pid))
+```
+
+```{r}
+#According to Q6, we need to convert loc, bugs_rem, db_hrs, db_mins to integer
+div3_tame4 <- div3_tame3 %>%
+  mutate(loc = as.integer(loc),
+         bugs_rem = as.integer(bugs_rem),
+         db_hrs = as.integer(db_hrs),
+         db_mins = as.integer(db_mins)
+         )
+# Display the data after taming
+head(div3_tame4, 10)
+```
+
+```{r}
+# Display the dimension after taming
+dim(div3_tame4)
+```
+
+# Q8. Random subset
+* Here we set the seed as ysn for reproducibility, then take a random sample of 700 rows from the 'div3_tame3' dataset.
+```{r}
+# Set the seed for reproducibility
+set.seed(ysn)
+# Here we choose a random sample of 700 programs from the dataset
+div3_sampled <- div3_tame4 %>%
+  sample_n(700)
+# Then we order it by rows
+div3_sampled <- div3_sampled %>%
+  arrange(rows)
+# Display the first 10 random sampled dataset
+head(div3_sampled, 10)
+```
+
+```{r}
+dim(div3_sampled)
+```
+
+# Q9.
+## Q9.(a) Add new columns
+* Here we do some calculation and add 'db_totalh', 'db_totalm', 'time_per_loc', 'bugs_per_loc'.
+```{r}
+#Here we add 4 new columns into the dataset
+div3_new <- div3_sampled %>%
+  mutate(
+    db_totalh = db_hrs + (db_mins / 60),
+    db_totalm = (db_hrs * 60) + db_mins,
+    time_per_loc = db_totalm / (loc / 1000),
+    bugs_per_loc = bugs_rem / (loc / 1000)
+  )
+```
+
+```{r}
+#After adding new columns, have to remove the db_hrs and db_mins
+div3_new1 <- div3_new %>%
+  select(- db_hrs, - db_mins)
+# Display the new dataset
+head(div3_new1,10)
+```
+
+```{r}
+dim(div3_new1)
+```
+
+## Q9.(b) Data Type
+
+- **db_totalh**: 
+  - **Quantitative Continuous**
+  - Represents the total number of hours spent debugging, which can be measured on a continuous scale.
+
+- **db_totalm**: 
+  - **Quantitative Discrete**
+  - Represents the total number of minutes spent debugging, which also can be measured on a continuous scale. However, db_totalm represents it as discrete by measuring it in integer minute.
+
+- **time_per_loc**: 
+  - **Quantitative Continuous**
+  - Represents the total time in minutes spent per 1000 lines of code, which is a calculated ratio and can take any real number values.
+  
+- **bugs_per_loc**: 
+  - **Quantitative Continuous**
+  - Represents the number of bugs per 1000 lines of code, although bugs could be considered as discrete, the variable bugs_per_loc is ratio over 1000 of code, it means it can take non-integer values, so it is continuous.
+
+* Here we already check 4 columns maintain in the right data type, so we don't need to change it again.
+
+# Q10.
+## Q10.(a) Display the summary statistics for the numerical values
+```{r}
+div3_summary_stats <- inspect_num(div3_new1)
+div3_summary_stats
+```
+
+## Q10.(b)
+### i. Median debugging time(per 1000 lines of code)
+```{r}
+# Here we calculate the median again to check if it is fitting above answer
+median_time_per_loc <- median(div3_new1$time_per_loc, na.rm = TRUE)
+median_time_per_loc <- round(median_time_per_loc, 2)
+median_time_per_loc
+```
+
+### ii. The IQR of the number of remaining bugs(per 1000 lines of code)
+```{r}
+# We use IQR() function to do the calculation and round to 2 decimal places
+iqr_bugs_per_loc <- IQR(div3_new1$bugs_per_loc, na.rm = TRUE)
+iqr_bugs_per_loc <- round(iqr_bugs_per_loc, 3)
+iqr_bugs_per_loc
+```
+* We know IQR is q3 - q1 = 19.28577 - 10.76313 = 8.52264 from (a)
+
+### iii. The program ID and number of lines of code for the longest program
+```{r}
+# We get the max loc then filter the pid 
+longest_program <- div3_new1 %>%
+  filter(loc == max(loc, na.rm = TRUE)) %>%
+  select(pid, loc)
+```
+
+```{r}
+# Longest program line in the program
+longest_program
+```
+
+# Q11. Plot the histogram and find the skewness
+```{r}
+# Here we plot the bugs_per_loc histogram
+ggplot(div3_new1, aes(bugs_per_loc)) +
+  geom_histogram(fill = 'grey', col = 'black')
+```
+
+```{r}
+# Here we use skewness() to get the skewed value
+skew_bugs_per_loc <- moments:: skewness(div3_new1$bugs_per_loc, na.rm = TRUE)
+skew_bugs_per_loc
+```
+* From the histogram we can see that it is right-skewed and it is unimodal, main values concentrated towards the left side
+
+# Q12.
+## Q12.(a) Scatterplot
+```{r}
+ggplot(div3_new1, aes(x = time_per_loc, y = bugs_per_loc)) +
+  geom_point() +
+  geom_smooth(method = 'lm')
+```
+* time_per_loc is the explanatory variable because it is the amount of time spent debugging and it affects the number of bugs remaining
+
+## Q12.(b) Linear relationship
+  - Although the line of best fit shows a general negative trend, the curved shape of the data points means a non-linear relationship.
+  - The data points scattered more widely at low time_per_loc values, when they become more tightly as time_per_loc increases.
+  - These patterns show that a simple linear model may not capture the complexity of the relationship well.
+
+# Q13.
+## Q13.(a) Box-cox
+* Here we display the BoxCox function, and the range of lambda is between -5 to 5 with 0.1 in each step
+```{r}
+div3_bc <- BoxCoxTrans(y = div3_new1$bugs_per_loc, x = div3_new1$time_per_loc, , lambda = seq(-5, 5, by = 0.1))
+div3_bc
+```
+* From the result, we can see that estimated lambda is -1.4 and it is in the range of the search
+
+## Q13.(b) tf_bugs column
+* Here we use lambda to apply the transformation and add it to the right of the dataset
+```{r}
+# First we set the lambda value from estimated lambda
+lambda_est <- -1.4
+
+# Here we transformed the data and add it into tf_bugs
+div3_new1$tf_bugs <- predict(div3_bc, div3_new1$bugs_per_loc)
+
+# Display the first 10 rows after adding tf_bugs column
+head(div3_new1, 10)
+```
+
+```{r}
+# Display the dimension with after adding tf_bugs column
+dim(div3_new1)
+```
+
+# Q14. Produce a scatterplot of the Box-Cox transformed data
+* Here we perform the scatterplot with a line of best fit
+```{r}
+ggplot(div3_new1, aes(x = time_per_loc,y = tf_bugs)) + 
+  geom_point() +
+  geom_smooth(method = 'lm')
+```
+
+* Here we show the histogram for the transformation data
+```{r}
+ggplot(div3_new1, aes(tf_bugs)) +
+  geom_histogram(fill = 'grey', col = 'black')
+```
+
+* This is the corresponding skewness
+```{r}
+skew_tf_bugs <- moments::skewness(div3_new1$tf_bugs, na.rm = TRUE)
+skew_tf_bugs
+```
+  - As we can see from the scatterplots between untransformed and transformed data, after transformed we got a linear trend, with the line of best fit fitting well, shows that the transformation made the relationship more suitable for linear modeling.
+  - The transformed histogram is more symmetrical and less skewed, means the transformation imporved the normality of data.
+
+# Q15. Predict
+## Q15.(a) General equation
+- Below shows the general equation:
+$$ y_{i} = \beta_{0} + \beta_{1}x_{i} + \epsilon_{i}\,, i = 1, 2...,n, \, \epsilon_{i} \sim N(0, \sigma^2) $$
+- In our case:
+  - $y_i$: Is the tf_bugs which transformed i bugs per 1000 LOC (response variable)
+  - $x_i$:  Is time_per_loc, which is i time spent debugging per 1000 lines of code (predicted variable)
+  - $\beta_{0}$: True intercept of the population model.
+  - $\beta_{1}$: True slope of the model, representing the effect of time_per_loc on tf_bugs.
+  - $\epsilon_{i}$: Error term representing the difference between the observed value and the predicted value.
+
+- Thus, below is our model:
+$$ \hat{y_i} = \hat{\beta_0} + \hat{\beta_1} x_{i} + \epsilon_{i} \,, where \, \epsilon_{i} \sim N(0, \sigma^2) $$
+
+## Q15.(b) Linear model
+```{r}
+# Here we use lm() to fit the linear model
+div3_model <- lm(tf_bugs ~ time_per_loc, data = div3_new1)
+# summary() provided the details, here we can see the estimated coefficients for the model
+summary(div3_model)
+```
+
+- The summary output provides the estimated coefficients for the intercept and the slope.
+
+- The correct formula with coefficients:
+$$ y_{i} = -0.00178 - 0.00006753 x_{i} + 0.000011236 $$
+  - $y_i$: Is the tf_bugs which transformed i bugs per 1000 LOC (response variable)
+  - $x_i$:  Is time_per_loc, which is i time spent debugging per 1000 lines of code (predicted variable)
+  - Intercept($\beta_{0}$): -0.00178
+  - Slope($\beta_{1}$): -0.00006753
+  - Error term($\epsilon_{i}$): (0.00106)^2 = 0.0000011236 (It is the square of the residual standard error, which is 0.00106)
+
+
+# Q16. Linear model assumption
+**Linearity**: The relationship between the predictor(time_per_loc) and the response(tf_bugs) is linear. We can assume that tf_bugs changes proportionly with time_per_loc.
+```{r}
+plot(div3_model, which = 1)
+```
+
+- From the plot we can see that the red line is roughly straight, which is a good sign. There is no trend in the residuals is an indication that the assumption are satisfied.
+ 
+**Homoscedasticity (Constant Variance of Errors)**: The spread of the error term(variance) should be the same for all values of the predictor(time_per_loc).
+
+```{r}
+plot(div3_model, which = 3)
+```
+
+- We can observe an even spread of the points in the vertical direction from left to right. There are no obvious trends make the plot been suspicious, shows the model has constant spread. The red line helps us to see the trend that it is roughly straight and flat, means this model fits the assumption.
+
+**Normality**: This assumption means that the errors(residuals) are normally distributed.
+```{r}
+plot(div3_model, which = 2)
+```
+
+- As we can see, this is the normal QQ plot of the residuals. From -2 to +2, the residuals distributed mostly lie on the line, means the model satisfied with the assumption.
+
+**Independence**: It means that the residuals are independent of each other. In other words, the value of the residual for one observation should not be related to any other residual. However, this may not hold in this context. For example, if one program has many bugs and takes a long time to debug, it may influence how efficiently the next program is debugged. This dependency could cause a pattern in the residuals. Due to this reason, the model may overestimate the reliability of its predictions.
+
+# Q17.
+## Q17.(a) Mean number of bugs remaining after the median debugging time
+```{r}
+# First we calculate the median debugging time
+med_time_per_loc <- median(div3_new1$time_per_loc)
+med_time_per_loc
+```
+
+```{r}
+# Second, we need to use predict() to get the predicted number of buggs remaining for the median debugging time
+div3_new_data <- tibble(
+  time_per_loc = med_time_per_loc
+)
+# Company wants the intervals at the 98% level
+div3_predict <- predict(div3_model, div3_new_data, interval = "confidence", level = 0.98)
+div3_predict
+```
+
+```{r}
+# Final, we need to transform the prediction back to original scale, we knew lambda is -1.4 from Q13(b)
+div3_ori_pred <- ((div3_predict * lambda_est) + 1) ^ (1 /lambda_est)
+div3_ori_pred
+```
+
+* Predicted mean number of bugs remaining (original scale) is 0.9819583 in 98% confidence interval.
+
+## Q17.(b) The number of bugs remaining for the company’s new software project
+* As we know from our company, the new software expected to consist 80,000 lines of code, it means it is 80 times larger from original software.
+```{r}
+# 28 days of 24 hours and convert it to minutes, with 80,000 LOC adjusted to units of 1,000 LOC
+new_software_time_per_loc <- (28 * 24 * 60) / (80000 / 1000)
+# Here we set the new time_per_loc to 80
+div3_new_software <- tibble(
+  time_per_loc = new_software_time_per_loc
+)
+# Company wants the intervals at the 98% level
+div3_predict1 <- predict(div3_model, div3_new_software, interval = "confidence", level = 0.98)
+div3_predict1
+```
+
+```{r}
+# Here we transform our predictions and intervals back to the scale of the original variables
+div3_new_pred <- ((div3_predict1 * lambda_est) + 1) ^ (1 /lambda_est)
+div3_new_pred
+```
+* Predicted number of bugs remaining for the new software project (original scale) in 98% confidence interval is between 0.9927267 to 0.9930317
+
+### To determine the total number of bugs remaining will be within acceptable limits, which is within 3000 bugs. Let's check with it:
+$$ Total \, Bugs = Predicted \, Value \, per \, 1000 \, LOC \cdot (80,000/1,000) $$
+- which 80,000 line is the new software porject and 1,000 is 1,000 per LOC
+```{r}
+# Predicted value for 80,000 LOC
+div3_new_pred[, "fit"] * (80000 / 1000)
+```
+
+```{r}
+# Upper bound for 80,000 LOC
+div3_new_pred[, "upr"] * (80000 / 1000)
+```
+
+```{r}
+# Lower bound for 80,000 LOC
+div3_new_pred[, "lwr"] * (80000 / 1000)
+```
+- Here we can confirmed that the total number of bugs is no more than 3,000.
+
+# Q18. Report
+* The company’s debugging process has been analyzed using a linear regression model to predict the number of bugs remaining based on the time spent on debugging per 1000 lines of code. The results shows that there is a significant negative relationship between debugging time (time_per_loc) and the number of bugs remaining (bugs_per_loc). It means more time spent debugging leads to fewer bugs left in the system.
+
+* For the median debugging time, the predicted number of bugs remaining was 8.48 bugs per 1000 lines of code within the 98% confidence interval. When this result is scaled to a new software project with 80,000 lines of code, the total estimated number of bugs remaining is about 648.47, which is significantly lower than the company’s regulation of 3,000 bugs. However, the residuals are not entirely independent, which could meant some unconsidered factors influencing the number of bugs. This dependency may cause us overestimated the reliability of the model.
+
+* Although the model predicts that the number of bugs will be well below 3,000, it is possible that the confidence intervals may not fully account for all factors. The predicted interval for the number of bugs is very tight, means we might overconfidence in the estimates. If there are some complexities or challenges in the debugging process, the actual number of bugs could be higher than predicted. 

@@ -1,0 +1,445 @@
+---
+title: |
+  | MATHS 7107 Data Taming
+  | Assignment 2
+author: "Yuchen Liu"
+date: "24/03/2024"
+output:
+  pdf_document: default
+---
+
+# Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE)
+```
+
+```{r }
+#Load the required packages
+#install.packages("pacman")
+pacman::p_load(tidyverse, dplyr, inspectdf, moments, caret)
+library(tidyverse)
+library(dplyr)
+library(inspectdf)
+library(moments)
+library(caret)
+```
+
+# Q1. Loading the data
+
+```{r}
+# Your student number goes here
+ysn = 1901276
+# Calculate your student number plus 1 and then modulo 3
+filenum <- (ysn + 1) %% 3
+filenum
+
+# Generate the filename
+filename <- paste0("./data/gadget_",filenum,".csv")
+filename
+
+# Read in the data and save it as a tibble
+gadget <- read.csv(filename, header=TRUE)
+gadget <- as_tibble(gadget)
+
+# Display the first 10 lines of the data
+head(gadget, 10)
+```
+
+# Q2. Adding a new column
+
+```{r}
+# Add a new column of row numbers to the far left
+gadget <- mutate(gadget, row_num = c(1:nrow(gadget)))
+gadget <- relocate(gadget, "row_num", .before = name)
+
+# Output the first 10 rows of the data.
+head(gadget, 10)
+```
+
+# Q3. Identifying data types
+
+* **row_num**: Categorical Nominal. Row numbers are labels that identify rows, not quantitative values. Although larger row numbers appear after smaller ones, this order is arbitrary and does not reflect any inherent ranking. Therefore, row numbers should be treated as categorical nominals, not ordered numeric values.
+
+* **name**: Categorical Nominal. The names of cities are are neither numerical values nor inherently ordered.
+
+* **population**: Quantitative Discrete. Population values are numerical, but they cannot be divided into non-integer values, making them non-continuous. For example, a population cannot have a fractional value like 0.5 persons.
+
+* **advertising**: Quantitative Continuous. The amount of money spent on advertising is numerical and can take on any continuous value.
+
+* **sales**: Quantitative Discrete. The variable "sales" represents the count of gadgets sold, so it is numerical and can only take on whole number values since gadgets cannot be sold in fractions.
+
+# Q4. Cleaning and taming the data
+
+## Q4-1. Deal with missing data
+
+```{r 4a1}
+# Look for N.A. values
+inspect_na(gadget)
+```
+
+```{r 4a2}
+# Delete the row where "sales" is missing
+gadget <- filter(gadget, is.na(gadget$sales) == FALSE)
+
+# Find rows where city name is missing, and fill with "noname_x"
+missing_indices <- which(gadget$name == "")
+gadget[missing_indices, 'name'] <- paste0("noname_", seq(1, length(missing_indices)))
+
+# Display the rows with the "name" filled with "noname_x"
+gadget %>% filter(str_detect(name, "noname_x*"))
+```
+
+## Q4-2. Remove duplicates
+
+```{r 4b}
+# Remove duplicates
+gadget <- gadget[!gadget %>% select(name:sales) %>% duplicated(fromLast = TRUE), ]
+```
+
+## Q4-3. Convert data types
+
+### Q4-3-1. Deal with 'population'
+
+```{r 4c1a}
+# Try to convert 'population' to integers and inspect if there are suspicious values
+population <- gadget %>% select(row_num, population)
+population$population <- as.integer(population$population)
+
+# Three NAs introduced by coercion, find the row numbers of these rows
+suspicious_row <- filter(population, is.na(population)) %>% select(row_num)
+suspicious_row
+```
+
+```{r 4c1b}
+# Inspect the rows that 'population' cannot be converted to integers
+gadget[gadget$row_num %in% suspicious_row$row_num, ]
+```
+
+* Delete rows where the 'population' is either blank or contains impossibly large numbers (e.g. 9.09E+11).
+
+```{r 4c1c}
+gadget <- gadget %>% filter(row_num != 504 & row_num != 592)
+```
+
+```{r 4c1d}
+# Convert the text-format population number into integer
+gadget[gadget$row_num == 616, "population"] <- '257333'
+
+# Convert the 'population' into integer type
+gadget$population <- as.integer(gadget$population)
+```
+
+### Q4-3-2. Deal with 'advertising'
+
+```{r 4c2}
+# Delete the '$' sign and commas in the 'advertising' column
+gadget$advertising <- str_replace_all(gadget$advertising, '\\$', '')
+gadget$advertising <- str_replace_all(gadget$advertising, ',', '')
+
+# Convert 'advertising' into numeric type
+gadget$advertising <- as.numeric(gadget$advertising)
+```
+
+### Q4-3-3. Deal with 'sales'
+
+```{r 4c3a}
+# Try to convert 'sales' to integers and inspect if there are suspicious values
+sales <- gadget %>% select(row_num, sales)
+sales$sales <- as.integer(sales$sales)
+
+# One NA introduced by coercion, find the row number
+suspicious_sales <- filter(sales, is.na(sales)) %>% select(row_num)
+suspicious_sales
+
+# Inspect the rows that 'sales' cannot be converted to integers
+gadget[gadget$row_num %in% suspicious_sales$row_num, ]
+```
+
+* Delete rows where the 'sales' contains impossibly large numbers (e.g. 1.11e15).
+
+```{r 4c3b}
+gadget <- gadget %>% filter(row_num != 767)
+
+# Convert 'sales' into integer type
+gadget$sales <- as.integer(gadget$sales)
+```
+
+## Q4-4. Deal with erroneous data
+
+* Delete the rows where absolute value of the 'population' is less than 10000 as each file records the sales in a set of cities with at least 10,000 people
+
+```{r 4d1}
+gadget <- gadget %>% filter(abs(population) >= 10000)
+
+# Convert negative values to positive values in 'population'
+gadget$population <- abs(gadget$population)
+
+# Plot 'population' to see if there's suspiciously large numbers
+ggplot(gadget, aes(x = name, y = population)) + geom_point()
+```
+
+* Delete the rows where absolute value of the 'advertising' is less than 20000 as the company spent at least $20,000 on advertising
+
+```{r 4d2}
+gadget <- gadget %>% filter(abs(advertising) >= 20000)
+
+# Convert negative values to positive values in 'advertising'
+gadget$advertising <- abs(gadget$advertising)
+
+# plot the "advertising" to see if there's suspiciously large numbers
+gadget %>% ggplot(aes(x = name, y = advertising)) + geom_point()
+```
+
+* Delete the rows where absolute value of the 'sales' is less than 100 as each file records the sales cities where the company made at least 100 original Gadget® sales.
+
+```{r 4d3}
+gadget <- gadget %>% filter(abs(sales) >= 100)
+
+# Convert negative values to positive values in 'sales'
+gadget$sales <- abs(gadget$sales)
+
+# plot the "sales" to see if there's suspiciously large numbers
+gadget %>% ggplot(aes(x = name, y = sales)) + geom_point()
+```
+
+## Q4-5. Convert 'row_num' to factor
+
+```{r 4e}
+gadget$row_num <- as.factor(gadget$row_num)
+```
+
+## Q4-6. Output the first 10 rows of the data.
+```{r 4f}
+head(gadget, 10)
+```
+
+# Q5. Creating new variables
+
+```{r}
+# create 'sales_pct' and 'adv_exp_pp'
+gadget <- mutate(gadget, sales_pct = round(100 * sales / population, 2))
+gadget <- mutate(gadget, adv_exp_pp = round(advertising / population, 2))
+
+# Output the first 10 rows of the data.
+head(gadget, 10)
+```
+
+## Identify the type of variables
+
+* **sales_pct**: Quantitative Continuous. The percentage of a city’s population who bought the gadget is numerical and can take on any continuous value between 0 and 100.
+
+* **adv_exp_pp**: Quantitative Continuous. Advertising expenditure per person in a city is also numerical and can take on any continuous value.
+
+# Q6. Sampling data
+
+```{r}
+# Sample 700 data points
+# Set the seed
+set.seed(ysn)
+
+# Sample data
+gadget_sam <- sample_n(gadget, 700)
+
+# Display the first 10 lines
+head(gadget_sam, 10)
+```
+
+# Q7. Producing summary statistics for all the numerical variables
+```{r}
+# Inspect the statistics of numerical data
+inspect_num(gadget_sam)
+```
+
+# Q8. Produce a scatterplot of the two new columns 'sales_pct' and 'adv_exp_pp'
+```{r}
+# Scatterplot
+ggplot(gadget_sam, aes(x = adv_exp_pp, y = sales_pct)) + 
+  geom_point() + 
+  geom_smooth(method = "lm")
+```
+
+* It doesn't look like a linear relationship between the two variables. Although most of the data points in the middle range are closely scattered around the straight line, the points deviate from the regression line when the advertising expenditure per person (adv_exp_pp) is either very low (< 1.5) or very high (> 4.5). This deviation causes the overall trend to be a slightly upward-bending curve, more like an exponential relationship rather than a linear one.
+
+# Q9. Plot a histogram of 'sales_pct' and calculate the skewness.
+
+```{r}
+# Histogram
+ggplot(gadget_sam, aes(x = sales_pct)) + 
+  geom_histogram()
+
+# Calculate the skewness
+skewness(gadget_sam$sales_pct)
+```
+
+* It doesn't look like a standard normal distribution. 
+  + Firstly, the mean of this data is significantly larger than zero, different from the mean of zero of a standard normal distribution. 
+  + Secondly, this data is obviously asymmetric, more specifically, right-skewed, whereas a standard normal distribution is symmetric. 
+  + The skewness value of this data is 0.930, which confirms it's far away from a normal distribution.
+
+# Q10. Applying a Box-Cox transformation
+
+```{r 10a}
+# Box-Cox Transformation
+bc <- BoxCoxTrans(y = gadget_sam$sales_pct,x = gadget_sam$adv_exp_pp)
+bc
+```
+
+* Estimated lambda is 0.5
+
+```{r 10b}
+# Apply the transformation to create a new column
+gadget_sam <- gadget_sam %>% mutate(
+                     Transformed_sales_pct = round(predict(bc,gadget_sam$sales_pct), 2))
+
+# Display the first 10 lines
+head(gadget_sam, 10)
+```
+
+# Q11. Producing a scatterplot of the transformed data
+
+```{r 11a}
+# Scatterplot
+ggplot(gadget_sam,aes(x = adv_exp_pp,Transformed_sales_pct)) + 
+  geom_point() + 
+  geom_smooth(method = "lm")
+```
+
+```{r 11b}
+# Histogram
+ggplot(gadget_sam, aes(x = Transformed_sales_pct)) + 
+  geom_histogram()
+```
+
+```{r 11c}
+# Skewness
+skewness(gadget_sam$Transformed_sales_pct)
+```
+
+* The transformed data exhibits a stronger linear relationship. 
+  + Firstly, the data points are closely scattered around the line of best fit, indicating a clear linear relationship between 'adv_exp_pp' and 'transformed sales_pct'. 
+  + Secondly, the histogram looks relatively symmetric and exhibits a standard normal distribution shape. 
+  + Thirdly, the skewness value is quite low, specifically 0.0938, which also confirms its symmetric nature.
+  + Overall, the transformed data fits a linear model better than the original data.
+
+# Q12. Fitting a linear model
+
+##  The general equation of a linear model for this transformed data
+$$y_i = \beta_0 + \beta_1x_i + \epsilon_i, \space \space i = 1, 2, ..., n, \space \space \epsilon_i \sim N(0, \sigma^2)$$
+$y_i$: the 'transformed_sales_pct' for the i^th^ city \newline
+$\beta_0$: the intercept of the linear line \newline
+$\beta_1$: the slope of the linear line \newline
+$x_i$: the 'adv_exp_pp' for the i^th^ city \newline
+$\epsilon_i$: the error term \newline
+
+## The formula for the line of best fit
+$$\hat{y_i} = \hat{\beta_0} + \hat{\beta_1}x_i$$
+$y_i$: the predicted 'transformed_sales_pct' for the i^th^ city \newline
+$\beta_0$: the estimated intercept coefficient of the line \newline
+$\beta_1$: the estimated slope coefficient of the line \newline
+$x_i$: the 'adv_exp_pp' for the i^th^ city \newline
+
+```{r}
+# Fitting a linear model
+gadget_lm <- lm(Transformed_sales_pct ~ adv_exp_pp, data = gadget_sam)
+summary(gadget_lm)
+```
+
+# The correct formula with coefficients
+
+$$\hat{y_i} = -1.899 + 3.173x_i$$
+$y_i$: the predicted 'transformed_sales_pct' for the i^th^ city \newline
+$x_i$: the 'adv_exp_pp' for the i^th^ city \newline
+
+# Q13. Checking if our model satisfies the 4 assumptions for a linear model
+
+```{r 13a}
+# Linearity
+plot(gadget_lm, which = 1)
+```
+
+* The red line in the residuals vs. fitted plot is a roughly straight line, indicating there's no obvious trend in the residuals. So the linearity assumption is satisfied.
+
+```{r 13b}
+# Homoscedasticity
+plot(gadget_lm, which = 3)
+```
+
+* Although the red line is going a bit up in the right end, the data points show no obvious change in vertical spread as we move from left to right on the scale-location plot. So the homoscedasticity is satisfied.
+
+```{r 13c}
+# Normality
+plot(gadget_lm, which = 2)
+```
+
+* The points lie quite close to the normal quantile reference line. So normality is satisfied.
+
+## Independence
+* The concept of independence assumes that the subjects do not influence each other's outcomes; however, this may not hold in this context. For instance, the consumer behavior in nearby cities could be interdependent. If one city exhibits high sales of Gadget, it could potentially affect the purchasing habits in a neighboring city due to frequent communication between residents of these cities.
+
+# Q14. Predicting
+
+```{r 14a}
+# predict for low spend: $0.05 per person
+city_low <- tibble(
+  adv_exp_pp = 0.05
+)
+
+res_low <- predict(gadget_lm, city_low, interval = 'prediction', level = 0.90)
+
+# Transforming predictions back into original scale
+sales_pct_low <- (res_low * 0.5 + 1) ** 2
+sales_pct_low
+```
+
+* The prediction interval is [0.201, 0.502], which means we can be 90% confident that in a city with $0.05 per person on advertising, the percentage of population who will buy Gadget2 will be between 0.201% and 0.502%.
+
+```{r 14b}
+# predict for medium spend: $3.14 per person
+city_medium <- tibble(
+  adv_exp_pp = 3.14
+)
+
+res_medium <- predict(gadget_lm, city_medium, interval = 'prediction', level = 0.90)
+
+# Transforming predictions back into original scale
+sales_pct_medium <- (res_medium * 0.5 + 1) ** 2
+sales_pct_medium
+```
+
+* The prediction interval is [19.88, 31.44], which means we can be 90% confident that in a city with $3.14 per person on advertising, the percentage of population who will buy Gadget2 will be between 19.88% and 31.44%.
+
+```{r 14c}
+# predict for high spend: $6.00 per person
+city_high <- tibble(
+  adv_exp_pp = 6.00
+)
+
+res_high <- predict(gadget_lm, city_high, interval = 'prediction', level = 0.90)
+
+# Transforming predictions back into original scale
+sales_pct_high <- (res_high * 0.5 + 1) ** 2
+sales_pct_high
+```
+
+* The prediction interval is [80.81, 103.04], which means we can be 90% confident that in a city with $6.00 per person on advertising, the percentage of population who will buy Gadget2 will be over 80.81%.
+
+# Q15. Interpret the model results for the company
+
+* The above model shows there is a clear positive relationship between advertising expenditure and the percentage of population purchasing Gadget; in other words, increasing advertising spending per person within a city is associated with a larger percentage of people buying Gadget. For example, spending 0.05 dollars for advertising per person results in an estimated 0.201% to 0.502% of the population purchasing Gadget. If the expenditure increases to 3.14 dollars per person, the predicted purchasing range jumps to between 19.88% and 31.44%. Further, a spending of $6.00 per person is linked to at least 80.81% of the population buying Gadget.
+
+* However, there is also a obvious mistake in the prediction. According to the above result, if 6.00 dollars were spent on advertising for each individual, the percentage of population who purchase Gadget2 could exceed 100% — specifically, up to 103.04% — which is logically impossible. This error comes from using a linear model without setting an upper limit. As a result, the predicted purchasing percentage rises linearly with advertising expenditure, which will finally exceed the maximum of 100% at some point.
+
+* Another issue with the prediction is that the fit value of 0.0168 for the low spending scenario seems unrealistic, as this value falls outside the range of the predictive lower and upper bounds, which are 0.201 and 0.502, respectively. To understand why this mistake occurred, we should first look at the maximum and minimum values of 'adv_exp_pp' in our training data.
+
+```{r 15}
+# Calculate the maximum value of adv_exp_pp
+max_adv_exp_pp <- max(gadget_sam$adv_exp_pp)
+max_adv_exp_pp
+
+# Calculate the minimum value of adv_exp_pp
+min_adv_exp_pp <- min(gadget_sam$adv_exp_pp)
+min_adv_exp_pp
+```
+
+* After looking at the training data, we found that the maximum value for 'adv_exp_pp' is 5.69, and the minimum is 0.48. However, in our predictions, the low spending scenario has a value of 0.05 per person, while the high spending scenario is 6.00 per person. Both of these values are outside the range of the training data. This is a classic case of extrapolation, where we make predictions for scenarios that fall beyond the data we trained our model on. So, the predictions for these two situations have low accuracy and are not reliable.

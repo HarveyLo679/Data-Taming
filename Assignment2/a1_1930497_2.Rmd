@@ -1,0 +1,481 @@
+---
+title: "Assignment 01"
+author: "Rubaiyat Alam Ruhin"
+date: "28-09-2024"
+output:
+  pdf_document: default
+---
+
+# Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message=FALSE)
+```
+
+```{r packages, echo=TRUE, message=FALSE}
+#Load the required packages
+library(tidyverse)
+```
+
+# Q1. Loading the data
+* As a data scientist I need to follow deliverable specifications strictly. So, here I am calculating which data set should I use to complete this assignment. 
+
+```{r ysn}
+# Your student number goes here
+ysn = 1930497
+# Calculate your student number modulo 4
+mod4 <- ysn %% 4
+mod4
+```
+
+* From the previous cell, we can see the remainder is 1. So, I am going to use india.csv throughout this assignment. Now, I am going to set the path of the data set to the filename and insert it in the read_csv function to load it as a tibble for the ease of working with a tibble.
+
+```{r load}
+filename <- paste0("./data/india.csv")
+filename
+
+# Read in the data using the correct tidyverse command
+data <- read_csv(filename)
+
+# Display the first 10 lines of the data
+head(data, 10)
+```
+
+# Q2. The dimensions of the data set
+* The dimension of the data set gives an idea about the size of the data. We get to know how many variables and data points we are going to work with.
+
+```{r dimension}
+# Display the dimension of the data set
+dim(data)
+```
+
+* The dim() function here takes 1 argument which is the data set and gives out the dimension of the india.csv data set as rows = 50, columns = 8
+
+# Q3. Random permutation of the rows
+* I set the seed to 1930497, then shuffle all rows without replacement. Finally, I output the first 10 rows of the permuted dataset.
+
+```{r permuted}
+# Set the seed
+set.seed(1930497)
+# Shuffle the dataset rows without replacement and name it permuted_data
+permuted_data <- sample_n(data, nrow(data), replace = FALSE)
+# Display the first 10 rows of the permuted dataset
+head(permuted_data, 10)
+```
+
+* The first 10 rows of the permuted dataset will be shown.
+
+# Q4. Adding an extra column of row numbers
+
+* I am adding a new column called 'Rows' at the far left, which contains the row numbers.This will help me track the changes made to the data set. Finally, I output the first 10 rows of the updated dataset.
+
+```{r rows}
+# Add a 'Rows' column to the left with the row numbers
+permuted_data <- permuted_data %>% mutate(Rows = row_number()) %>% relocate(Rows)
+# Display the first 10 rows of the dataset with the new 'Rows' column
+head(permuted_data, 10)
+```
+
+* The first 10 rows of the dataset with the 'Rows' column will be shown.
+
+# Q5 Data cleaning
+
+## Q5.1 Duplicates removal
+* I will first check for duplicate rows in the dataset, excluding the 'Rows' column. I will display the duplicate rows, if any, and then remove them from the dataset.
+
+```{r duplicate}
+# Identify the duplicate rows, excluding the 'Rows' column
+duplicate_rows <- permuted_data %>% 
+  group_by(across(-Rows)) %>% 
+  filter(n() > 1)
+# Display the duplicate rows
+duplicate_rows
+# Remove the duplicate rows, keeping only distinct ones
+cleaned_data <- permuted_data %>% distinct(across(-Rows), .keep_all = TRUE)
+```
+
+## Q5.2 Test data removal
+I will now remove the 31st row from the dataset because it contains test data.
+
+```{r test}
+# Remove row 31 from the dataset
+cleaned_data <- cleaned_data[-31, ]
+```
+
+## Q5.3 Negative sign removal
+
+* I will remove the negative sign using string manipulation in row 33, column '2005'.
+
+```{r negative}
+# Remove the negative sign in row 33, column '2005' using str_replace
+cleaned_data[32, "2005"] <- str_replace(cleaned_data[32, "2005"], "-", "")
+```
+
+## Q5.4 Impossible data removal
+* I will remove row 26 from the dataset because it contains impossible values (9999 runs in 38 balls, which is not possible in cricket).
+
+```{r impossible}
+# Remove row 26 due to the impossible value
+cleaned_data <- cleaned_data[-26, ]
+```
+
+## Q5.5 Correction of typos
+* I will correct the typo in row 37, column '2002', changing the word 'zero' to the number '0' using str_replace. After that, I will fix the typos in the "RightHanded" column for rows 13 and 43, changing "Y" to "yes".
+
+```{r typos}
+# Correct the typo in row 37, column '2002' using str_replace
+cleaned_data[37, "2002"] <- str_replace(cleaned_data[37, "2002"], "zero", "0")
+#Correct the typo in row 13
+cleaned_data[13, "RightHanded"] <- "yes"
+# Correct the typo in row 43
+cleaned_data[43, "RightHanded"] <- "yes"
+```
+
+```{r display}
+# Display the cleaned dataset after correcting the typos
+head(cleaned_data, 10)
+```
+
+* This will display the cleaned dataset after fixing all the issues in the dataset.
+
+# Q6 Data Tidying
+
+## Q6.1 Convert from wide to long form
+* I will convert the dataset from wide form to long form by gathering the columns '2000' to '2005' into two new columns: 'year' and 'performance'.
+
+```{r long}
+# Convert the dataset to long form using gather
+cleaned_data_long <- cleaned_data %>% gather(key = 'year', value = 'performance', `2000`:`2005`)
+```
+
+## Q6.2 Extracting values from performance
+* I will use str_match to extract the values for innings, outs, runs, and balls from the 'performance' column.
+
+```{r extract}
+# Use str_match to extract values
+tidy_data <- cleaned_data_long %>%
+  mutate(
+    INNINGS = str_match(performance, "(\\d+) innings")[,2],
+    OUTS = str_match(performance, "(\\d+) outs")[,2],
+    RUNS = str_match(performance, "(\\d+) runs")[,2],
+    BALLS = str_match(performance, "(\\d+) balls")[,2]
+  )
+```
+
+* This will tidy dataset with the new columns: INNINGS, OUTS, RUNS, and BALLS, keeping the original data types.
+
+## Q6.3 Removing the performance column
+* I will now remove the 'performance' column from the tidy_data dataset as it is no longer needed.
+
+```{r preformance}
+# Remove the 'performance' column
+tidy_data <- tidy_data %>% select(-performance)
+```
+
+## Q6.4  Adding new tidy row column
+
+* I will add a new column called 'T Rows' to store the row numbers of the tidy data set. The new column will be placed second from the left, right after the original 'Rows' column.
+
+```{r tidy}
+# Add the 'T Rows' column with row numbers and place it second from the left
+tidy_data <- tidy_data %>%
+  mutate(T_Rows = row_number()) %>%
+  relocate(T_Rows, .after = Rows)
+```
+
+```{r output}
+# Display the first 10 rows of the updated dataset
+head(tidy_data, 10)
+# Display the dimensions of the dataset
+dim(tidy_data)
+```
+
+This will display the first 10 rows and the dimensions of the updated dataset with the 'T Rows' column.
+
+# Q7 Types of Variables in the Cricket Dataset
+
+- **Rows**:  
+  - **Categorical Ordinal**  
+  - This variable represents the position of each row in the dataset. Even though it is numerical, the row numbers have a specific order, which makes it an ordinal variable. The order matters for tracking purposes but does not serves any other purposed other than position.
+
+- **T Rows**:  
+  - **Categorical Ordinal**  
+  - Similar to `Rows`, this variable tracks the tidy row numbers. Since the row numbers follow a sequence and maintain order without any numerical meaning, this variable is ordinal.
+
+- **Player**:  
+  - **Categorical Nominal**  
+  - This column shows the names of the players, which are distinct, non-numeric categories without any ranking. Each player is simply a unique input, and there is no order in the context of cricket performance. So, this variable is nominal.
+
+- **RightHanded**:  
+  - **Categorical Nominal**  
+  - This column says whether a player is right-handed or not. Since there are only two possible categories, "yes" or "no," and neither of these categories holds any order, it is considered nominal. In the cricket context, this indicates the batting style of the player but does not imply any measurable quantity.
+
+- **Year**:  
+  - **Categorical Ordinal**  
+  - Although years are numerical, in this context, they represent distinct periods without an inherent metric. Therefore, `Year` is classified as ordinal, as the order of years matters, but it is not a continuous variable.
+
+- **INNINGS**:  
+  - **Quantitative Discrete**  
+  - The number of innings played by a player in a particular year. An inning is a countable event in cricket, and since it must always be a whole number, this variable is discrete. For example, a player can’t play 1.5 innings, making this a quantitative discrete variable.
+
+- **OUTS**:  
+  - **Quantitative Discrete**  
+  - The number of times a player got out during their innings in cricket. This is a count of specific events (getting out), which are whole numbers, so it is classified as discrete. In cricket, a player can be out 0, 1, or more times. They cannot get out in fractional amounts.
+
+- **RUNS**:  
+  - **Quantitative Discrete**  
+  - In cricket, runs are always counted as whole numbers (1 run, 50 runs), and there are no fractional runs. So, this variable is discrete and represents a key performance variable for the player.
+
+- **BALLS**:  
+  - **Quantitative Discrete**  
+  - Each ball bowled is a distinct, countable event, and the number of balls faced is always a whole number. Therefore, this is also a quantitative discrete variable.
+
+# Q8 Data Taming
+* From **Module 2, page 3**. Here’s what I’ll follow to make sure my data is properly **tamed** based on the provided guidelines:
+
+## Q8.1 Naming Conventions for Variable Names
+   - Ensure all variable names are less than 20 characters.
+   - Use **snake_case** (lowercase letters with underscores).
+   - Avoid spaces in variable names.
+
+```{r naming}
+# Rename the columns using str_replace, including Rows and T_Rows
+tamed_data <- tidy_data %>%
+  rename(
+    rows = str_replace("Rows", " ", "_"),
+    t_rows = str_replace("T_Rows", " ", "_"),
+    player = str_replace("Player", " ", "_"),
+    right_handed = str_replace("RightHanded", " ", "_"),
+    innings = str_replace("INNINGS", " ", "_"),
+    outs = str_replace("OUTS", " ", "_"),
+    runs = str_replace("RUNS", " ", "_"),
+    balls = str_replace("BALLS", " ", "_"),
+  )
+```
+
+## Q8.2 Column Arrangement
+   - Place the subject identifiers (such as `Player`) in the first column.
+
+```{r columns}
+# Ensure subject -> 'Player' is the first column
+tamed_data <- tamed_data %>%
+  relocate(player, .before = t_rows)
+```
+
+## Q8.3 Handling Dates
+   - For `Year`, it should remain as an integer because it only represents the year.
+
+```{r year}
+# Keep 'Year' as an integer
+tamed_data$year <- as.integer(tamed_data$year)
+```
+
+## Q8.4 Ordered Factors, Characters, and Logicals
+   - Convert **categorical ordinal** variables to ordered factors (none in this dataset).
+   - Convert **nominal categorical** variables to regular factors:
+     - `RightHanded` (convert "yes"/"no" to logical TRUE/FALSE).
+     - `Player` remains as a regular character (factor with many levels would be inefficient).
+   - **Store integers as `<int>`** for memory conservation.
+
+```{r logical}
+# Convert 'RightHanded' from "yes"/"no" to TRUE/FALSE logical values
+tamed_data$right_handed <- ifelse(tamed_data$right_handed == "yes", TRUE, FALSE)
+```
+
+## Q8.5 Good Practices
+   - Make sure the dataset uses integers for numeric values, nominal factors for categorical variables, and logicals for binary variables.
+
+```{r type}
+# Ensure numeric columns (innings to balls) are stored as integers
+tamed_data$innings <- as.integer(tamed_data$innings)
+tamed_data$outs <- as.integer(tamed_data$outs)
+tamed_data$runs <- as.integer(tamed_data$runs)
+tamed_data$balls <- as.integer(tamed_data$balls)
+```
+
+```{r disp}
+# Display the first 10 rows and the dimensions of the tamed dataset
+head(tamed_data, 10)
+dim(tamed_data)
+```
+
+* The first 10 rows and the dimensions of the cleaned, tamed dataset.
+
+# Q9 Zero value removal
+
+* I will remove all rows where the player did not face a single ball (where 'balls' column is 0). The resulting dataset will be named 'non_zero_data'.
+
+```{r zero}
+# Remove rows where 'balls' is 0
+non_zero_data <- tamed_data %>%
+  filter(balls != 0)
+# Display the first 10 rows and the dimensions of the non-zero dataset
+head(non_zero_data, 10)
+dim(non_zero_data)
+```
+
+* The first 10 rows and the dimensions of the non-zero dataset.
+
+# Q10 Creating sample data
+
+* I will set the seed as my ysn for reproducibility, then take a random sample of 70 rows from the 'non_zero_data' dataset.
+
+```{r sample}
+# Set the seed for reproducibility
+set.seed(1930497)
+# Take a random sample of 70 rows
+sample_data <- non_zero_data %>%
+  sample_n(70)
+```
+
+* After that, I will sort the sample by the 't_rows' column, and the result will be saved as 'sample_data'.
+
+```{r sort}
+## Sort the sample by 't_rows'
+sample_data <- sample_data %>%
+  arrange(t_rows)
+```
+
+```{r dis}
+# Display the first 10 rows and the dimensions of the sample dataset
+head(sample_data, 10)
+dim(sample_data)
+```
+
+* The first 10 rows and the dimensions of the sorted sample dataset.
+
+# Q11 Data manipulation
+
+## Q11.1 calculating pct_out and run_rate
+
+* I will calculate the percentage of innings where the player was out (pct_out) and the run rate (runs per ball). After that, insert these two new columns just to the right of the 'year' column, and then explain the variable types.
+
+```{r calc}
+# Insert the new columns 'pct_out' and 'run_rate' right after the 'year' column
+sample_data <- sample_data %>%
+  mutate(
+    pct_out = (outs / innings) * 100,   # Percentage of innings where the player was out
+    run_rate = round(runs / balls, 2)             # Runs per ball
+  ) %>%
+  relocate(pct_out, run_rate, .after = year)
+```
+
+```{r displ}
+# Display the first 10 rows and the dimensions of the dataset
+head(sample_data, 10)
+dim(sample_data)
+```
+
+### Variable Type Analysis:
+
+- **pct_out**:  
+  - This represents the percentage of innings where the player got out. Since this is a ratio (percentage), it can take any value between 0 and 100 (with decimal precision), so it is **Quantitative Continuous**.
+
+- **run_rate**:  
+  - This is the number of runs scored per ball, which is also a continuous measurement that can have decimal precision. It represents a ratio, so this variable is also **Quantitative Continuous**.
+
+## Q11.2 Player analysis
+
+* I will find the players with the lowest percentage of outs and the players with the highest run rate, and report the corresponding years and values.
+
+### Q11.2.1 Player with lowest percentage of outs
+
+```{r lowest}
+# Find the player with the lowest percentage of outs
+lowest_pct_out <- sample_data %>%
+  filter(pct_out == min(pct_out, na.rm = TRUE)) %>%
+  select(player, year, pct_out)
+# Display the results
+lowest_pct_out
+```
+
+* Lowest pct_out is 0
+
+### Q11.2.2 PLayer with highest run rate
+
+```{r}
+# Find the player with the highest run rate
+highest_run_rate <- sample_data %>%
+  filter(run_rate == max(run_rate, na.rm = TRUE)) %>%
+  select(player, year, run_rate)
+# Display the results
+highest_run_rate
+```
+
+* Highest run_rate is 0.97
+
+# Q12 Side by side boxplot of run rate with year on the horizontal axis
+
+* I will first convert the 'year' variable to an ordinal data type and then produce a side-by-side boxplot of 'run_rate' with 'year' on the horizontal axis, and use the 'fill' option to split the data according to handedness.
+
+```{r fact}
+# Convert 'year' to an ordinal type
+sample_data$year <- factor(sample_data$year, ordered = TRUE)
+sample_data
+```
+
+```{r box}
+# Produce the boxplot
+ggplot(sample_data, aes(x = year, y = run_rate, fill = right_handed)) +
+  geom_boxplot() +
+  labs(title = "Run Rate by Year and Handedness", x = "Year", y = "Run Rate") +
+  theme_minimal()
+```
+
+* A side-by-side boxplot showing the run rate by year, split by handedness.
+
+# Q13 Data cleaning
+
+## Q13.1 Percentage of out on the vertical axis
+* I will create two side-by-side boxplots. The first one will show 'pct_out' on the vertical axis.
+
+```{r boxp}
+# First boxplot: pct_out vs handedness
+plot_pct_out <- ggplot(sample_data, aes(x = right_handed, y = pct_out, fill = right_handed)) +
+  geom_boxplot() +
+  labs(title = "Percentage Out by Handedness", x = "Handedness", y = "Percentage Out") +
+  theme_minimal()
+# Display both plots
+plot_pct_out
+```
+
+## Q13.2 Run rate on the vertical axis
+* The second one will show 'run_rate'.
+
+```{r boxplt}
+# Second boxplot: run_rate vs handedness
+plot_run_rate <- ggplot(sample_data, aes(x = right_handed, y = run_rate, fill = right_handed)) +
+  geom_boxplot() +
+  labs(title = "Run Rate by Handedness", x = "Handedness", y = "Run Rate") +
+  theme_minimal()
+# Display both plots
+plot_run_rate
+```
+
+* Both will have handedness on the horizontal axis, and I'll use handedness to fill the boxplots. Two side-by-side boxplots, one showing 'pct_out' and the other showing 'run_rate', both split by handedness.
+
+# Q14 Analysis of the Cricket Club's Question
+
+## Lowest Percentage of Outs
+
+In question 11(b), both **T Yohannan** and **A Nehra** (right-handed players) had a **0% percentage of outs** in 2001 and 2004. This means they didn’t get out in any of their innings during those years, showing strong performance. However, since this only happened in two specific years, we can’t say this reflects how all right-handed players perform.
+
+## Highest Run Rate
+
+The highest run rate was by **IR Siddiqui**, another right-handed player. In 2001, he had a run rate of **0.967 runs per ball**, which is quite impressive. This means he scored almost one run per ball, showing excellent batting skills.
+
+## Boxplots Analysis (Q12 and Q13)
+
+Looking at the boxplots for **run rate by year and handedness**, **run rate by handedness**, and **percentage of outs by handedness**:
+
+- In the **run rate by year and handedness** plot, we can see that in some years (like 2000, 2001, and 2004), **right-handed** players had higher median run rates than left-handed players. However, in other years (like 2002 and 2003), left-handed players performed better.
+- The overall **run rate by handedness** plot shows that **left-handed** players have a slightly higher median run rate than right-handed players. Right-handed players, though, have a wider range of performance, with some doing very well and others not so much.
+- The **percentage of outs by handedness** plot shows more variability among right-handed players. Some right-handed players got out less often, while others were out more frequently. Both groups, though, have a median percentage of outs close to 100%, meaning most players get out during their innings, regardless of handedness.
+
+## Conclusion
+
+From the data, it seems that while some right-handed players, like **IR Siddiqui**, perform exceptionally well, **left-handed players tend to be more consistent**. Right-handed players show more variation, with some doing great and others not performing as well.
+
+When it comes to getting out, both groups are similar, with most players having a high percentage of outs. But again, right-handed players show more variety, with a few players avoiding getting out more often.
+
+In short, while left-handed players might be more consistent overall, right-handed players can also perform exceptionally well but with more variability. The cricket club should consider this when making decisions about their players.
